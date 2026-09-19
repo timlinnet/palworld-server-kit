@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "Beats are broadcast in order via the Palworld announce API.",
+    "Normal beats fire one per trigger (level-up, or the timer).",
+    "Beats marked burst:true fire immediately after the previous one,",
+    "separated only by burst_delay_seconds - once the antidote lands he",
+    "already knows, so the payoff is delivered as one volley rather than",
+    "dragged out over three separate triggers.",
+    "Edit freely. Keep lines short - in-game announcements flash past."
+  ],
+  "burst_delay_seconds": 7,
+  "beats": [
+    { "text": "Server notice: packet loss on the western route." },
+    { "text": "Cause traced to a courier job queued a long time ago." },
+    { "text": "The job never returned. It has been retrying ever since." },
+    { "text": "Inspected the payload. It is not data." },
+    { "text": "It is a crate." },
+    { "text": "The crate holds the antidote.", "burst": true },
+    { "text": "The courier is on a sled.", "burst": true },
+    { "text": "The girl lived. Good boy, Balto.", "burst": true }
+  ]
+}
