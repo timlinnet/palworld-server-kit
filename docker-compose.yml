@@ -1,0 +1,51 @@
+services:
+  palworld:
+    image: thijsvanloef/palworld-server-docker:latest
+    container_name: palworld-server
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+    ports:
+      # Game traffic. This is the one that MUST be reachable from the internet,
+      # or your Xbox friends cannot see the server in the community list.
+      - "8211:8211/udp"
+      # Steam-style query port, used by server browsers.
+      - "27015:27015/udp"
+      # REST API. Bound to loopback ONLY - it is HTTP Basic auth over a plain
+      # socket, so anyone who reaches this port with the admin password owns
+      # the server. The AI agent talks to it over an SSH tunnel or from the
+      # same host. Never publish this.
+      - "127.0.0.1:8212:8212/tcp"
+
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: "${TZ}"
+
+      PORT: 8211
+      PLAYERS: "${PLAYERS}"
+
+      SERVER_NAME: "${SERVER_NAME}"
+      SERVER_DESCRIPTION: "${SERVER_DESCRIPTION}"
+      # COMMUNITY=true is what publishes the server to the in-game list.
+      # Xbox consoles cannot type an IP address, so this is the ONLY way
+      # your friends can join. It requires SERVER_PASSWORD to be set.
+      COMMUNITY: "true"
+      SERVER_PASSWORD: "${SERVER_PASSWORD}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+
+      # Steam covers PC (both Steam and Game Pass clients authenticate here).
+      CROSSPLAY_PLATFORMS: "(Steam,Xbox,PS5,Mac)"
+
+      # REST API on, RCON off - Palworld is dropping RCON support.
+      REST_API_ENABLED: "true"
+      REST_API_PORT: 8212
+      RCON_ENABLED: "false"
+
+      BACKUP_ENABLED: "true"
+      BACKUP_CRON_EXPRESSION: "0 */6 * * *"
+      DELETE_OLD_BACKUPS: "true"
+      OLD_BACKUP_DAYS: 14
+
+    volumes:
+      - ./palworld:/palworld/
