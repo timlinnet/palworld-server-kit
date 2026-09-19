@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palworld Server</title>
+<style>
+  :root {
+    --bg: #f7f7f8;  --panel: #fff;      --line: #e3e3e6;
+    --ink: #1a1a1c; --muted: #6b6b73;   --accent: #2f6f4f;
+    --danger: #a33; --ok: #2e8b57;      --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131316; --panel: #1c1c20; --line: #2e2e34;
+      --ink: #ececed; --muted: #9a9aa4; --accent: #6fcf9a;
+      --danger: #e57373; --ok: #6fcf9a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  h1 { font-size: 21px; margin: 0; font-weight: 600; }
+  .status { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.up { background: var(--ok); }
+  .dot.down { background: var(--danger); }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .tile .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .tile .value { font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+
+  .row { display: flex; gap: 8px; }
+  input[type=text] {
+    flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font: inherit; min-width: 0;
+  }
+  button {
+    padding: 9px 15px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font: inherit; cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { button.primary { color: #12261c; } }
+  /* Greyed out wins over .primary - a locked update button must not look live. */
+  button:disabled, button.primary:disabled {
+    background: var(--bg); border-color: var(--line); color: var(--muted);
+    cursor: not-allowed; opacity: .6;
+  }
+  button:disabled:hover { border-color: var(--line); }
+  button.link { background: none; border: none; color: var(--muted); padding: 4px 8px; font-size: 13px; }
+  button.link:hover { color: var(--danger); }
+
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+       color: var(--muted); font-weight: 600; padding: 0 10px 8px 0; }
+  td { padding: 9px 10px 9px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  td.name { font-weight: 500; font-variant-numeric: normal; }
+  .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+
+  .invite-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; flex-wrap: wrap; }
+  .invite-row + .invite-row { border-top: 1px solid var(--line); }
+  .invite-label { font-size: 13px; color: var(--muted); min-width: 92px; }
+  .invite-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 15px; font-weight: 600; letter-spacing: .01em;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 10px; user-select: all; word-break: break-all;
+  }
+  .invite-hint { font-size: 13px; color: var(--muted); margin: 10px 0 0; line-height: 1.5; }
+
+  #toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px;
+    font-size: 14px; opacity: 0; transition: .25s; pointer-events: none; max-width: 90vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.bad { background: var(--danger); color: #fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="servername">Palworld Server</h1>
+    <span class="status"><span class="dot" id="dot"></span><span id="statustext">connecting…</span></span>
+  </header>
+  <p class="sub" id="version"></p>
+
+  <div class="tiles">
+    <div class="tile"><div class="label">Players</div><div class="value" id="m-players">–</div></div>
+    <div class="tile"><div class="label">Server FPS</div><div class="value" id="m-fps">–</div></div>
+    <div class="tile"><div class="label">Uptime</div><div class="value" id="m-uptime">–</div></div>
+    <div class="tile"><div class="label">In-game days</div><div class="value" id="m-days">–</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Invite a friend</h2>
+    <div class="invite-row">
+      <span class="invite-label">PC — address</span>
+      <span class="invite-value" id="inv-address">–</span>
+      <button id="copy-address">Copy</button>
+    </div>
+    <div class="invite-row">
+      <span class="invite-label">Password</span>
+      <span class="invite-value" id="inv-password">–</span>
+      <button id="copy-password">Copy</button>
+    </div>
+    <div class="invite-row">
+      <button id="copy-both" class="primary">Copy invite message</button>
+    </div>
+    <p class="invite-hint">
+      <strong>Xbox / PS5:</strong> consoles can't type an address. Tell them to open
+      <em>Join Multiplayer Game → Community Servers</em>, search for
+      <strong id="inv-name">this server</strong>, and enter the password.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2>Announce</h2>
+    <form class="row" id="announce-form">
+      <input type="text" id="announce-input" placeholder="Message shown to everyone in-game" autocomplete="off">
+      <button class="primary" type="submit">Send</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Online players</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Name</th><th>Level</th><th>Ping</th><th></th></tr></thead>
+        <tbody id="players"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="players-empty">Nobody online.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Server health</h2>
+    <div class="scroll">
+      <table>
+        <tbody id="health"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>World</h2>
+    <button id="save-btn">Save world now</button>
+  </div>
+
+  <div class="panel">
+    <h2>Update</h2>
+    <button id="update-btn" class="primary">Update server &amp; restart</button>
+    <button id="restart-anyway" class="link" style="display:none">Restart anyway</button>
+    <p class="invite-hint" id="update-status">Restarts the server so it picks up
+      the latest Palworld version. The world is saved first and is not touched.
+      Anyone online gets a 60-second warning, then a few minutes of downtime —
+      and they must update their own game to rejoin.</p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let toastTimer;
+
+function toast(msg, bad) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = ""), 3000);
+}
+
+async function api(path, body) {
+  const res = await fetch("/api/" + path, body ? {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  } : {});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+function setStatus(up, text) {
+  $("dot").className = "dot " + (up ? "up" : "down");
+  $("statustext").textContent = text;
+}
+
+function fmtUptime(sec) {
+  if (sec == null) return "–";
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function renderPlayers(players) {
+  const tbody = $("players");
+  tbody.innerHTML = "";
+  $("players-empty").style.display = players.length ? "none" : "block";
+
+  for (const p of players) {
+    const uid = p.userId ?? p.userid;
+    const tr = document.createElement("tr");
+
+    const name = document.createElement("td");
+    name.className = "name";
+    name.textContent = p.name ?? "(unknown)";
+
+    const level = document.createElement("td");
+    level.textContent = p.level ?? "–";
+
+    const ping = document.createElement("td");
+    ping.textContent = p.ping != null ? Math.round(p.ping) + " ms" : "–";
+
+    const actions = document.createElement("td");
+    for (const [label, ep, confirm] of [
+      ["Kick", "kick", `Kick ${p.name}?`],
+      ["Ban", "ban", `Ban ${p.name}? This is not easily undone.`],
+    ]) {
+      const b = document.createElement("button");
+      b.className = "link";
+      b.textContent = label;
+      b.onclick = async () => {
+        if (!window.confirm(confirm)) return;
+        try {
+          await api(ep, { userid: uid, message: `You were ${label.toLowerCase()}ed.` });
+          toast(`${p.name} ${label.toLowerCase()}ed.`);
+          refresh();
+        } catch (e) { toast(e.message, true); }
+      };
+      actions.appendChild(b);
+    }
+
+    tr.append(name, level, ping, actions);
+    tbody.appendChild(tr);
+  }
+}
+
+async function refresh() {
+  try {
+    const [info, metrics, players] = await Promise.all([
+      api("info"), api("metrics"), api("players"),
+    ]);
+
+    $("servername").textContent = info.servername || "Palworld Server";
+    $("inv-name").textContent = info.servername || "the server";
+    $("version").textContent = info.version ? "Version " + info.version : "";
+    $("m-players").textContent =
+      `${metrics.currentplayernum ?? 0} / ${metrics.maxplayernum ?? "?"}`;
+    $("m-fps").textContent = metrics.serverfps ?? "–";
+    $("m-uptime").textContent = fmtUptime(metrics.uptime);
+    $("m-days").textContent = metrics.days ?? "–";
+
+    renderPlayers(players.players || []);
+    setStatus(true, "online");
+  } catch (e) {
+    setStatus(false, "unreachable");
+    $("version").textContent = e.message;
+  }
+}
+
+$("announce-form").onsubmit = async ev => {
+  ev.preventDefault();
+  const input = $("announce-input");
+  const message = input.value.trim();
+  if (!message) return;
+  try {
+    await api("announce", { message });
+    input.value = "";
+    toast("Announced.");
+  } catch (e) { toast(e.message, true); }
+};
+
+$("save-btn").onclick = async () => {
+  try { await api("save", {}); toast("World saved."); }
+  catch (e) { toast(e.message, true); }
+};
+
+// --- update & restart ---------------------------------------------------
+const UPDATE_IDLE_HINT = $("update-status").textContent;
+let updateTimer = null;
+let updateWasRunning = false;
+// Set by "Restart anyway" - the only way past the up-to-date lock. Cleared on
+// every press so it never persists into a later, unrelated click.
+let restartAnyway = false;
+
+function renderUpdate(u) {
+  const btn = $("update-btn"), hint = $("update-status"), anyway = $("restart-anyway");
+  const running = u.state === "running";
+
+  // Poll fast whenever something is moving - including a download this
+  // dashboard did not start (a manual docker restart, or a VPS reboot).
+  if (running || u.busy) {
+    if (!updateTimer) updateTimer = setInterval(pollUpdate, 3000);
+  } else if (updateTimer) {
+    clearInterval(updateTimer); updateTimer = null;
+  }
+
+  // Locked because something is downloading/booting: no override. Clicking
+  // through would restart the container mid-download and restart the ~5 GB
+  // fetch from zero. Locked because it is already current: overridable, since
+  // a healthy-but-wedged server still needs a way to be restarted.
+  const lockedBusy = !!u.busy;
+  const lockedCurrent = !lockedBusy && !!u.current && !restartAnyway;
+  btn.disabled = lockedBusy || lockedCurrent;
+  anyway.style.display = lockedCurrent ? "inline" : "none";
+
+  if (lockedBusy) {
+    updateWasRunning = updateWasRunning || running;
+    const pct = u.progress ? ` — ${u.progress}% downloaded` : "";
+    hint.textContent = running
+      ? `Updating — ${u.step || "working"}${pct}… Steam re-downloads the whole ` +
+        "~5 GB game, so this takes about 10 minutes. The server shows as " +
+        "unreachable the whole time; that's normal."
+      : `The server is already downloading or booting an update${pct}. ` +
+        "Wait for it to finish — restarting now would start the download over.";
+    return;
+  }
+
+  if (u.state === "done") {
+    hint.textContent = `Updated ${u.old_version || "?"} → ${u.new_version || "?"}. ` +
+      "Players need the same game version to see and join the server.";
+    if (updateWasRunning) { toast("Server updated to " + (u.new_version || "latest") + "."); refresh(); }
+  } else if (u.state === "failed") {
+    hint.textContent = "Update failed: " + (u.error || "unknown error");
+    if (updateWasRunning) toast("Update failed.", true);
+  } else if (lockedCurrent) {
+    hint.textContent = `Already on the latest server build (${u.installed_build}) — ` +
+      "there is nothing to download, so this would just be ten minutes of " +
+      "downtime. Use “Restart anyway” only if the server is misbehaving.";
+  } else if (u.reason === "outdated") {
+    hint.textContent = `A newer server build is available (${u.installed_build} → ` +
+      `${u.latest_build}). ` + UPDATE_IDLE_HINT;
+  } else {
+    hint.textContent = UPDATE_IDLE_HINT;
+  }
+  updateWasRunning = false;
+}
+
+async function pollUpdate() {
+  try { renderUpdate(await api("update")); } catch {}
+}
+
+$("restart-anyway").onclick = () => {
+  restartAnyway = true;
+  pollUpdate();
+  toast("Update button unlocked — the server is already up to date.");
+};
+
+$("update-btn").onclick = async () => {
+  const upToDate = restartAnyway;
+  if (!window.confirm(
+    upToDate
+      ? "Restart the server even though it is already on the latest build?\n\n" +
+        "Nothing will be downloaded. The world is saved first — nothing is " +
+        "wiped — but anyone online gets a 60-second warning and then about " +
+        "ten minutes of downtime."
+      : "Update the server to the latest Palworld version?\n\n" +
+        "The world is saved first — nothing is wiped. Anyone online gets a " +
+        "60-second warning, then the server restarts (about ten minutes of " +
+        "downtime while Steam re-downloads the game). Players must update " +
+        "their own game to rejoin."
+  )) return;
+  restartAnyway = false;  // one press only
+  try {
+    await api("update", {});
+    renderUpdate({ state: "running", step: "starting", busy: true });
+  } catch (e) { toast(e.message, true); pollUpdate(); }
+};
+
+pollUpdate(); // pick up an update already in progress when the page opens
+// Slow poll so a patch released while the page sits open flips the button from
+// "already current" to "update available" without needing a reload.
+setInterval(pollUpdate, 60000);
+
+// --- invite panel -------------------------------------------------------
+let invite = { address: "", password: "" };
+
+async function copyText(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(label + " copied.");
+  } catch {
+    toast("Copy blocked — select the text and press Ctrl+C.", true);
+  }
+}
+
+async function loadInvite() {
+  try {
+    invite = await api("invite");
+    $("inv-address").textContent = invite.address || "not set";
+    $("inv-password").textContent = invite.password || "not set";
+  } catch (e) {
+    $("inv-address").textContent = "unavailable";
+    $("inv-password").textContent = "unavailable";
+  }
+}
+
+$("copy-address").onclick = () => copyText(invite.address, "Address");
+$("copy-password").onclick = () => copyText(invite.password, "Password");
+$("copy-both").onclick = () => {
+  const name = $("servername").textContent;
+  copyText(
+    `Palworld server: ${name}\n` +
+    `PC — join by IP: ${invite.address}\n` +
+    `Xbox/PS5 — Community Servers, search "${name}"\n` +
+    `Password: ${invite.password}`,
+    "Invite message"
+  );
+};
+
+// --- server health (host-level, fetched over SSH, cached 20s) -----------
+function healthRow(label, value, state) {
+  const tr = document.createElement("tr");
+  const l = document.createElement("td");
+  l.className = "name";
+  l.textContent = label;
+  const v = document.createElement("td");
+  if (state) {
+    const dot = document.createElement("span");
+    dot.className = "dot " + state;
+    dot.style.marginRight = "7px";
+    v.appendChild(dot);
+  }
+  v.appendChild(document.createTextNode(value));
+  tr.append(l, v);
+  return tr;
+}
+
+const gb = mb => (mb / 1024).toFixed(1) + " GB";
+
+async function loadHealth() {
+  const tbody = $("health");
+  try {
+    const h = await api("health");
+    tbody.innerHTML = "";
+    if (h.error) {
+      tbody.appendChild(healthRow("Status", h.error, "down"));
+      return;
+    }
+    // Palworld's game loop is largely single-threaded, so load matters more
+    // than raw core count - flag when 1-min load approaches core count.
+    const loadState = h.load[0] > h.cores * 0.9 ? "down" : "up";
+    tbody.append(
+      healthRow("Container", h.container, h.container === "healthy" ? "up" : "down"),
+      healthRow("Discord bridge", h.bridge, h.bridge === "active" ? "up" : "down"),
+      healthRow("Status board", h.board, h.board === "active" ? "up" : "down"),
+      healthRow("CPU load", `${h.load.join("  ")}  (${h.cores} cores)`, loadState),
+      healthRow("Memory", `${gb(h.mem_used_mb)} / ${gb(h.mem_total_mb)}`),
+      healthRow("Disk", `${gb(h.disk_used_mb)} / ${gb(h.disk_total_mb)}`),
+    );
+  } catch (e) {
+    tbody.innerHTML = "";
+    tbody.appendChild(healthRow("Status", e.message, "down"));
+  }
+}
+
+loadInvite();
+loadHealth();
+refresh();
+setInterval(refresh, 5000);
+setInterval(loadHealth, 20000);
+</script>
+</body>
+</html>
